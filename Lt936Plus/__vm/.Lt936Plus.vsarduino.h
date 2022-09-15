@@ -6,7 +6,7 @@
 			All non-arduino files created by visual micro and all visual studio project or solution files can be freely deleted and are not required to compile a sketch (do not delete your own code!).
 			Note: debugger breakpoints are stored in '.sln' or '.asln' files, knowledge of last uploaded breakpoints is stored in the upload.vmps.xml file. Both files are required to continue a previous debug session without needing to compile and upload again
 	
-	Hardware: ESP32S2 Dev Module                                                                                                                (esp32_esp32s2), Platform=esp32, Package=esp32
+	Hardware: ESP32S2 Dev Module                                                                                               (esp32_esp32s2), Platform=esp32, Package=esp32
 */
 
 #if defined(_VMICRO_INTELLISENSE)
@@ -34,7 +34,7 @@
 #define ESP32 1
 #define CORE_DEBUG_LEVEL 0
 #define ARDUINO_USB_MODE 0
-#define ARDUINO_USB_CDC_ON_BOOT 0
+#define ARDUINO_USB_CDC_ON_BOOT 1
 #define ARDUINO_USB_MSC_ON_BOOT 0
 #define ARDUINO_USB_DFU_ON_BOOT 0
 #define __cplusplus 201103L
@@ -107,11 +107,6 @@ typedef long pthread_cond_t;
 // Ensure ArduinoJSON Lib Intellisense works correctly
 #define ARDUINOJSON_ENABLE_STD_STREAM 0
 
-class VM_DBG {
-public:
-	// Send a Message to the Serial Monitor via WiFi Connection 
-	void sendUserMessage(const char* theMessage) {};
-} MicroDebug;
 #include <arduino.h>
 #include <pins_arduino.h> 
 

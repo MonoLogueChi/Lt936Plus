@@ -10,6 +10,14 @@
 #include <AiEsp32RotaryEncoder.h>
 #include <Preferences.h>
 
+#if ARDUINO_USB_CDC_ON_BOOT
+#define HWSerial Serial0
+#define USBSerial Serial
+#else
+#define HWSerial Serial
+USBCDC USBSerial;
+#endif
+
 
 # pragma region 定义
 
@@ -20,11 +28,19 @@ bool canRefreshScreen = true;
 
 
 // 编码器
-#define ROTARY_ENCODER_A_PIN 12
-#define ROTARY_ENCODER_B_PIN 13
-#define ROTARY_ENCODER_BUTTON_PIN 11
+#define ROTARY_ENCODER_A_PIN 35
+#define ROTARY_ENCODER_B_PIN 34
+#define ROTARY_ENCODER_BUTTON_PIN 36
 #define ROTARY_ENCODER_VCC_PIN 10
 #define ROTARY_ENCODER_STEPS 4
+
+// 休眠
+#define XM_PIN 4
+bool toSleep = false;
+bool isSleeping = false;
+
+// 加热
+#define JR_PIN 2
 
 // 测温
 #define TEMP_ADC_PIN 3
@@ -132,13 +148,6 @@ void RefreshScreen()
 	}
 }
 
-void ScreenInit()
-{
-	u8g2.begin();
-	u8g2.enableUTF8Print();
-	RefreshScreen();
-}
-
 void TaskRefreshScreen(void* p)
 {
 	(void)p;
@@ -148,6 +157,22 @@ void TaskRefreshScreen(void* p)
 		RefreshScreen();
 		vTaskDelay(2000);
 	}
+}
+
+void ScreenInit()
+{
+	u8g2.begin();
+	u8g2.enableUTF8Print();
+	RefreshScreen();
+
+	xTaskCreatePinnedToCore(
+		TaskRefreshScreen,
+		"TaskRotary",
+		1024 * 8,
+		nullptr,
+		1,
+		nullptr,
+		ARDUINO_RUNNING_CORE);
 }
 
 # pragma endregion
@@ -189,6 +214,98 @@ void TaskRotary(void* p)
 	}
 };
 
+void RotaryInit()
+{
+	xTaskCreatePinnedToCore(
+		TaskRotary,
+		"TaskRotary",
+		1024 * 8,
+		nullptr,
+		1,
+		nullptr,
+		ARDUINO_RUNNING_CORE);
+}
+
+# pragma endregion
+
+# pragma region 设置参数
+
+void TaskSerial(void* p)
+{
+	(void)p;
+
+	for (;;)
+	{
+		if (USBSerial.available())
+		{
+			auto c = USBSerial.readString();
+			USBSerial.println(c);
+		}
+		vTaskDelay(100);
+		USBSerial.println(isSleeping);
+	}
+}
+
+void SerialInit()
+{
+	USBSerial.begin(115200);
+	USB.begin();
+
+	xTaskCreatePinnedToCore(
+		TaskSerial,
+		"TaskSerial",
+		1024 * 8,
+		nullptr,
+		1,
+		nullptr,
+		ARDUINO_RUNNING_CORE);
+}
+# pragma endregion
+
+# pragma region 休眠
+
+void NotSleep()
+{
+	toSleep = false;
+	isSleeping = false;
+}
+
+
+void TaskSleep(void* p)
+{
+	(void)p;
+
+	for (;;)
+	{
+		if (!isSleeping)
+		{
+			toSleep = true;
+			vTaskDelay(1000 * 45);
+			if (toSleep)
+			{
+				isSleeping = true;
+			}
+		}
+
+		vTaskDelay(1000);
+	}
+}
+
+
+void SleepInit()
+{
+	pinMode(XM_PIN, INPUT_PULLUP);
+	attachInterrupt(digitalPinToInterrupt(XM_PIN), NotSleep, FALLING);
+	xTaskCreatePinnedToCore(
+		TaskSleep,
+		"TaskSleep",
+		1024 * 4,
+		nullptr,
+		1,
+		nullptr,
+		ARDUINO_RUNNING_CORE);
+}
+
 # pragma endregion
 
 
@@ -199,24 +316,15 @@ void setup()
 
 	// 初始化屏幕
 	ScreenInit();
-	xTaskCreatePinnedToCore(
-		TaskRefreshScreen,
-		"TaskRotary",
-		1024 * 8,
-		nullptr,
-		1,
-		nullptr,
-		ARDUINO_RUNNING_CORE);
 
 	// 编码器
-	xTaskCreatePinnedToCore(
-		TaskRotary,
-		"TaskRotary",
-		1024 * 8,
-		nullptr,
-		1,
-		nullptr,
-		ARDUINO_RUNNING_CORE);
+	RotaryInit();
+
+	// 休眠
+	SleepInit();
+
+	// 初始化串口
+	SerialInit();
 }
 
 void loop()
