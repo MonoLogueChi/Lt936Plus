@@ -4,6 +4,7 @@
  Author:	mc
 */
 
+#include "AdcFilter.h"
 #include <Arduino.h>
 #include <Wire.h>
 #include <U8g2lib.h>
@@ -36,8 +37,9 @@ bool canRefreshScreen = true;
 
 // 休眠
 #define XM_PIN 4
-bool toSleep = false;
-bool isSleeping = false;
+#define SLEEP_TIME 3
+uint8_t toSleep = 0;
+boolean isSleeping = false;
 
 // 加热
 #define JR_PIN 2
@@ -45,10 +47,10 @@ bool isSleeping = false;
 // 测温
 #define TEMP_ADC_PIN 3
 
-#define TEMP_TARGET_MAX 420
-#define TEMP_TARGET_MIN 50
+#define TEMP_TARGET_MAX 450
+#define TEMP_TARGET_MIN 100
 #define TEMP_SAVE_MAX 320
-#define TEMP_TARGET_DEFAULT 150
+#define TEMP_TARGET_DEFAULT 180
 
 #define TEMP_TARGET_KEY "TARGETT"
 
@@ -58,6 +60,11 @@ int TargetT = TEMP_TARGET_DEFAULT;
 
 // 当前温度
 int CurrentT = 0;
+int CurrentTRaw = 0;
+const float k0 = 0.19;
+const int b0 = 50;
+const float ca0 = 750 / 4095;
+const float ca1 = ca0 / (1 + 1 / 1.5);
 
 # pragma endregion
 
@@ -129,18 +136,38 @@ void RefreshScreen()
 
 		u8g2.setFontDirection(1);
 
-		u8g2.setFont(u8g2_font_logisoso32_tr);
-		u8g2.setCursor(8, y2);
-		u8g2.print(CurrentT);
-		u8g2.setCursor(72, y1);
-		u8g2.print(TargetT);
+		// 非休眠状态
+		if (!isSleeping)
+		{
+			u8g2.setFont(u8g2_font_logisoso32_tr);
+			u8g2.setCursor(8, y2);
+			u8g2.print(CurrentT);
+			u8g2.setCursor(72, y1);
+			u8g2.print(TargetT);
 
-		// 温度
-		u8g2.setFont(u8g2_font_wqy12_t_gb2312a);
-		u8g2.setCursor(48, 2);
-		u8g2.print("当前温度");
-		u8g2.setCursor(112, 2);
-		u8g2.print("设定温度");
+			// 温度
+			u8g2.setFont(u8g2_font_wqy12_t_gb2312a);
+			u8g2.setCursor(48, 2);
+			u8g2.print("当前温度");
+			u8g2.setCursor(112, 2);
+			u8g2.print("设定温度");
+		}
+		else
+		{
+			u8g2.setFont(u8g2_font_logisoso32_tr);
+			u8g2.setCursor(8, y2);
+			u8g2.print(CurrentT);
+			u8g2.setCursor(72, y1);
+			u8g2.print(TEMP_TARGET_DEFAULT);
+
+			// 温度
+			u8g2.setFont(u8g2_font_wqy12_t_gb2312a);
+			u8g2.setCursor(48, 2);
+			u8g2.print("当前温度");
+			u8g2.setCursor(112, 2);
+			u8g2.print("休眠状态");
+		}
+
 
 		u8g2.sendBuffer();
 
@@ -155,7 +182,7 @@ void TaskRefreshScreen(void* p)
 	for (;;)
 	{
 		RefreshScreen();
-		vTaskDelay(2000);
+		vTaskDelay(1000);
 	}
 }
 
@@ -242,23 +269,21 @@ void TaskSerial(void* p)
 			USBSerial.println(c);
 		}
 		vTaskDelay(100);
-		USBSerial.println(isSleeping);
 	}
 }
 
 void SerialInit()
 {
 	USBSerial.begin(115200);
-	USB.begin();
 
-	xTaskCreatePinnedToCore(
-		TaskSerial,
-		"TaskSerial",
-		1024 * 8,
-		nullptr,
-		1,
-		nullptr,
-		ARDUINO_RUNNING_CORE);
+	// xTaskCreatePinnedToCore(
+	// 	TaskSerial,
+	// 	"TaskSerial",
+	// 	1024 * 8,
+	// 	nullptr,
+	// 	1,
+	// 	nullptr,
+	// 	ARDUINO_RUNNING_CORE);
 }
 # pragma endregion
 
@@ -266,7 +291,7 @@ void SerialInit()
 
 void NotSleep()
 {
-	toSleep = false;
+	toSleep = 0;
 	isSleeping = false;
 }
 
@@ -279,15 +304,13 @@ void TaskSleep(void* p)
 	{
 		if (!isSleeping)
 		{
-			toSleep = true;
-			vTaskDelay(1000 * 45);
-			if (toSleep)
+			if (toSleep > SLEEP_TIME)
 			{
 				isSleeping = true;
 			}
+			toSleep++;
 		}
-
-		vTaskDelay(1000);
+		vTaskDelay(1000 * 10);
 	}
 }
 
@@ -299,7 +322,7 @@ void SleepInit()
 	xTaskCreatePinnedToCore(
 		TaskSleep,
 		"TaskSleep",
-		1024 * 4,
+		1024 * 8,
 		nullptr,
 		1,
 		nullptr,
@@ -308,6 +331,65 @@ void SleepInit()
 
 # pragma endregion
 
+# pragma region 加热控制
+
+AdcFilter adc = AdcFilter(30, 8);
+
+
+int T2C(int t)
+{
+	return 3.3 * (k0 * t + b0) / (ca0 * (k0 * t + b0) + ca1);
+}
+
+int C2T(int c)
+{
+	return (ca1 * c / (3.3 - ca0 * c) - b0) / k0;
+}
+
+void JRAdc()
+{
+	CurrentTRaw = adc.GetValue(TEMP_ADC_PIN, CurrentTRaw);
+	CurrentT = C2T(CurrentTRaw);
+}
+
+void JR()
+{
+	const int targetT = isSleeping ? TargetT : TEMP_TARGET_DEFAULT;
+}
+
+
+void TaskJR(void* p)
+{
+	(void)p;
+
+	for (;;)
+	{
+		JRAdc();
+		JR();
+		delay(20);
+	}
+}
+
+void JRInit()
+{
+	analogReadResolution(12);
+	analogSetPinAttenuation(TEMP_ADC_PIN, ADC_0db);
+
+	ledcSetup(0, 20 * 1000, 8);
+	ledcAttachPin(JR_PIN, 0);
+	ledcWrite(0, 0);
+
+	xTaskCreatePinnedToCore(
+		TaskJR,
+		"TaskJR",
+		1024 * 8,
+		nullptr,
+		2,
+		nullptr,
+		ARDUINO_RUNNING_CORE);
+}
+
+# pragma endregion
 
 void setup()
 {
@@ -322,6 +404,9 @@ void setup()
 
 	// 休眠
 	SleepInit();
+
+	// 加热
+	JRInit();
 
 	// 初始化串口
 	SerialInit();
