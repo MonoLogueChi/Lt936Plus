@@ -47,9 +47,6 @@ bool canRefreshScreen = true;
 #endif
 
 
-
-
-
 // 休眠
 #define XM_PIN 4
 #define SLEEP_TIME 3
@@ -76,19 +73,23 @@ int TargetT = TEMP_TARGET_DEFAULT;
 // 当前温度
 int CurrentT = 0;
 int CurrentTRaw = 0;
-const float k0 = 0.19;
-const int b0 = 50;
+
+
+constexpr float k0 = 0.19f;
+constexpr float b0 = 50.0f;
+constexpr float R1 = 1.0 / (1.0 / 1000.0 + 1.0 / 1500.0);
 
 #if CONFIG_IDF_TARGET_ESP32S2
-const float ca0 = 750.0 / 4095.0;
+constexpr float DMin = 0.0f;
+constexpr float DMax = 0.75f;
 #elif CONFIG_IDF_TARGET_ESP32S3
-const float ca0 = 1050.0 / 4095.0;
+constexpr float DMin = 0.0f;
+constexpr float DMax = 0.95f;
 #else
-const float ca0 = 1050 / 4095;
+constexpr float DMin = 0.0f;
+constexpr float DMax = 3.3f;
 
 #endif
-
-const float ca1 = ca0 / (1 + 1 / 1.5);
 
 # pragma endregion
 
@@ -359,35 +360,37 @@ void SleepInit()
 AdcFilter adc = AdcFilter(30, 8);
 
 
-int T2C(int t)
+int T2C(float t)
 {
-	return 3.3 * (k0 * t + b0) / (ca0 * (k0 * t + b0) + ca1);
+	const float U = 3.3f* (k0 * t + b0) / (k0 * t + b0 + R1);
+	return U * (4095.0f / DMax);
 }
 
-int C2T(int c)
+int C2T(float c)
 {
-	return (ca1 * c / (3.3 - ca0 * c) - b0) / k0;
+	const float U = c * (DMax / 4096.0f);
+	return (U * b0 + U * R1 - 3.3f * b0) / ((3.3f - 1.0f) * k0);
 }
 
 void JRAdc()
 {
 	CurrentTRaw = adc.GetValue(TEMP_ADC_PIN, CurrentTRaw);
-	CurrentT = C2T(CurrentTRaw);
+	CurrentT = C2T(static_cast<float>(CurrentTRaw));
 }
 
 void JR()
 {
 	const int targetT = isSleeping ? TargetT : TEMP_TARGET_DEFAULT;
-	const int a = T2C(targetT) - CurrentTRaw;
+	const int a = T2C(static_cast<float>(targetT)) - CurrentTRaw;
 
 	USBSerial.print(CurrentTRaw);
 	USBSerial.print(",");
 	USBSerial.println(CurrentT);
 
-	if(a > 0)
+	if (a > 0)
 	{
 		int b = a * 2;
-		if(b > 1024)
+		if (b > 1024)
 		{
 			b = 1024;
 		}
@@ -408,7 +411,7 @@ void TaskJR(void* p)
 	{
 		JRAdc();
 		JR();
-		delay(500);
+		delay(200);
 	}
 }
 
