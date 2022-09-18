@@ -6,15 +6,15 @@
 			All non-arduino files created by visual micro and all visual studio project or solution files can be freely deleted and are not required to compile a sketch (do not delete your own code!).
 			Note: debugger breakpoints are stored in '.sln' or '.asln' files, knowledge of last uploaded breakpoints is stored in the upload.vmps.xml file. Both files are required to continue a previous debug session without needing to compile and upload again
 	
-	Hardware: ESP32S2 Dev Module                                                                                               (esp32_esp32s2), Platform=esp32, Package=esp32
+	Hardware: ESP32S3 Dev Module                                                                                                                (esp32_esp32s3), Platform=esp32, Package=esp32
 */
 
 #if defined(_VMICRO_INTELLISENSE)
 
 #ifndef _VSARDUINO_H_
 #define _VSARDUINO_H_
-#define __ESP32_esp32s2__ 1
-#define __ESP32_ESP32S2__ 1
+#define __ESP32_esp32s3__ 1
+#define __ESP32_ESP32S3__ 1
 #define _VMDEBUG 1
 #define HAVE_CONFIG_H 1
 #define MBEDTLS_CONFIG_FILE "mbedtls/esp_config.h"
@@ -26,13 +26,15 @@
 #define _POSIX_READER_WRITER_LOCKS 1
 #define F_CPU 240000000L
 #define ARDUINO 108010
-#define ARDUINO_ESP32S2_DEV 1
+#define ARDUINO_ESP32S3_DEV 1
 #define ARDUINO_ARCH_ESP32 1
-#define ARDUINO_BOARD "ESP32S2_DEV"
-#define ARDUINO_VARIANT "esp32s2"
+#define ARDUINO_BOARD "ESP32S3_DEV"
+#define ARDUINO_VARIANT "esp32s3"
 #define ARDUINO_PARTITION_default 1
 #define ESP32 1
 #define CORE_DEBUG_LEVEL 0
+#define ARDUINO_RUNNING_CORE 1
+#define ARDUINO_EVENT_RUNNING_CORE 1
 #define ARDUINO_USB_MODE 0
 #define ARDUINO_USB_CDC_ON_BOOT 1
 #define ARDUINO_USB_MSC_ON_BOOT 0
@@ -107,6 +109,11 @@ typedef long pthread_cond_t;
 // Ensure ArduinoJSON Lib Intellisense works correctly
 #define ARDUINOJSON_ENABLE_STD_STREAM 0
 
+class VM_DBG {
+public:
+	// Send a Message to the Serial Monitor via WiFi Connection 
+	void sendUserMessage(const char* theMessage) {};
+} MicroDebug;
 #include <arduino.h>
 #include <pins_arduino.h> 
 

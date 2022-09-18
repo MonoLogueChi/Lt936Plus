@@ -29,11 +29,26 @@ bool canRefreshScreen = true;
 
 
 // 编码器
+#if CONFIG_IDF_TARGET_ESP32S2
+
 #define ROTARY_ENCODER_A_PIN 35
 #define ROTARY_ENCODER_B_PIN 34
 #define ROTARY_ENCODER_BUTTON_PIN 36
 #define ROTARY_ENCODER_VCC_PIN 10
 #define ROTARY_ENCODER_STEPS 4
+
+#else
+#define ROTARY_ENCODER_A_PIN 35
+#define ROTARY_ENCODER_B_PIN 36
+#define ROTARY_ENCODER_BUTTON_PIN 37
+#define ROTARY_ENCODER_VCC_PIN 10
+#define ROTARY_ENCODER_STEPS 4
+
+#endif
+
+
+
+
 
 // 休眠
 #define XM_PIN 4
@@ -63,7 +78,16 @@ int CurrentT = 0;
 int CurrentTRaw = 0;
 const float k0 = 0.19;
 const int b0 = 50;
-const float ca0 = 750 / 4095;
+
+#if CONFIG_IDF_TARGET_ESP32S2
+const float ca0 = 750.0 / 4095.0;
+#elif CONFIG_IDF_TARGET_ESP32S3
+const float ca0 = 1050.0 / 4095.0;
+#else
+const float ca0 = 1050 / 4095;
+
+#endif
+
 const float ca1 = ca0 / (1 + 1 / 1.5);
 
 # pragma endregion
@@ -218,10 +242,6 @@ void IRAM_ATTR readEncoderISR()
 void TaskRotary(void* p)
 {
 	(void)p;
-	rotaryEncoder.begin();
-	rotaryEncoder.setup(readEncoderISR);
-	rotaryEncoder.setBoundaries(TEMP_TARGET_MIN, TEMP_TARGET_MAX, false);
-	rotaryEncoder.setEncoderValue(TargetT);
 
 	for (;;)
 	{
@@ -229,7 +249,6 @@ void TaskRotary(void* p)
 		{
 			TargetT = rotaryEncoder.readEncoder();
 			RefreshScreen();
-			vTaskDelay(5);
 		}
 		if (rotaryEncoder.isEncoderButtonClicked())
 		{
@@ -238,11 +257,17 @@ void TaskRotary(void* p)
 				SaveIntData(TEMP_TARGET_KEY, TargetT);
 			}
 		}
+		vTaskDelay(10);
 	}
 };
 
 void RotaryInit()
 {
+	rotaryEncoder.begin();
+	rotaryEncoder.setup(readEncoderISR);
+	rotaryEncoder.setBoundaries(TEMP_TARGET_MIN, TEMP_TARGET_MAX, false);
+	rotaryEncoder.setEncoderValue(TargetT);
+
 	xTaskCreatePinnedToCore(
 		TaskRotary,
 		"TaskRotary",
@@ -265,10 +290,8 @@ void TaskSerial(void* p)
 	{
 		if (USBSerial.available())
 		{
-			auto c = USBSerial.readString();
-			USBSerial.println(c);
 		}
-		vTaskDelay(100);
+		vTaskDelay(1000);
 	}
 }
 
@@ -355,6 +378,25 @@ void JRAdc()
 void JR()
 {
 	const int targetT = isSleeping ? TargetT : TEMP_TARGET_DEFAULT;
+	const int a = T2C(targetT) - CurrentTRaw;
+
+	USBSerial.print(CurrentTRaw);
+	USBSerial.print(",");
+	USBSerial.println(CurrentT);
+
+	if(a > 0)
+	{
+		int b = a * 2;
+		if(b > 1024)
+		{
+			b = 1024;
+		}
+		ledcWrite(0, b);
+	}
+	else
+	{
+		ledcWrite(0, 0);
+	}
 }
 
 
@@ -366,7 +408,7 @@ void TaskJR(void* p)
 	{
 		JRAdc();
 		JR();
-		delay(20);
+		delay(500);
 	}
 }
 
@@ -382,7 +424,7 @@ void JRInit()
 	xTaskCreatePinnedToCore(
 		TaskJR,
 		"TaskJR",
-		1024 * 8,
+		1024 * 16,
 		nullptr,
 		2,
 		nullptr,
