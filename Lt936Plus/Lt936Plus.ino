@@ -31,8 +31,8 @@ bool canRefreshScreen = true;
 // 编码器
 #if CONFIG_IDF_TARGET_ESP32S2
 
-#define ROTARY_ENCODER_A_PIN 35
-#define ROTARY_ENCODER_B_PIN 34
+#define ROTARY_ENCODER_A_PIN 34
+#define ROTARY_ENCODER_B_PIN 35
 #define ROTARY_ENCODER_BUTTON_PIN 36
 #define ROTARY_ENCODER_VCC_PIN 10
 #define ROTARY_ENCODER_STEPS 4
@@ -129,28 +129,28 @@ void RefreshScreen()
 
 		if (TargetT / 100 > 0)
 		{
-			y1 = 2;
+			y1 = 62;
 		}
 		else if (TargetT / 10 > 0)
 		{
-			y1 = 22;
+			y1 = 42;
 		}
 		else
 		{
-			y1 = 42;
+			y1 = 22;
 		}
 
 		if (CurrentT / 100 > 0)
 		{
-			y2 = 2;
+			y2 = 62;
 		}
 		else if (CurrentT / 10 > 0)
 		{
-			y2 = 22;
+			y2 = 42;
 		}
 		else
 		{
-			y2 = 42;
+			y2 = 22;
 		}
 
 
@@ -159,37 +159,37 @@ void RefreshScreen()
 		u8g2.drawFrame(0, 0, 63, 64);
 		u8g2.drawFrame(64, 0, 63, 64);
 
-		u8g2.setFontDirection(1);
+		u8g2.setFontDirection(3);
 
 		// 非休眠状态
 		if (!isSleeping)
 		{
 			u8g2.setFont(u8g2_font_logisoso32_tr);
-			u8g2.setCursor(8, y2);
+			u8g2.setCursor(55, y2);
 			u8g2.print(CurrentT);
-			u8g2.setCursor(72, y1);
+			u8g2.setCursor(120, y1);
 			u8g2.print(TargetT);
 
 			// 温度
 			u8g2.setFont(u8g2_font_wqy12_t_gb2312a);
-			u8g2.setCursor(48, 2);
+			u8g2.setCursor(14, 62);
 			u8g2.print("当前温度");
-			u8g2.setCursor(112, 2);
+			u8g2.setCursor(78, 62);
 			u8g2.print("设定温度");
 		}
 		else
 		{
 			u8g2.setFont(u8g2_font_logisoso32_tr);
-			u8g2.setCursor(8, y2);
+			u8g2.setCursor(55, y2);
 			u8g2.print(CurrentT);
-			u8g2.setCursor(72, y1);
+			u8g2.setCursor(120, y1);
 			u8g2.print(TEMP_TARGET_DEFAULT);
 
 			// 温度
 			u8g2.setFont(u8g2_font_wqy12_t_gb2312a);
-			u8g2.setCursor(48, 2);
+			u8g2.setCursor(14, 62);
 			u8g2.print("当前温度");
-			u8g2.setCursor(112, 2);
+			u8g2.setCursor(78, 62);
 			u8g2.print("休眠状态");
 		}
 
@@ -258,7 +258,7 @@ void TaskRotary(void* p)
 				SaveIntData(TEMP_TARGET_KEY, TargetT);
 			}
 		}
-		vTaskDelay(10);
+		vTaskDelay(5);
 	}
 };
 
