@@ -9,15 +9,16 @@
 	#include "WProgram.h"
 #endif
 
+
 class AdcFilter
 {
 public:
 	AdcFilter(uint16_t A, uint16_t N);
 	AdcFilter();
-	[[nodiscard]] uint16_t GetValue(uint8_t pin, uint16_t oldValue) const;
+	int readMiliVolts(uint8_t pin, int oldValue);
 private:
-	uint16_t _a;
-	uint16_t _n;
+	uint16_t a;
+	uint16_t n;
 };
 
 #endif

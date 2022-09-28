@@ -4,34 +4,34 @@
 
 #include "AdcFilter.h"
 
-uint32_t k = 0;
-uint16_t k0 = 0;
+int adc_k = 0;
+int adc_k0 = 0;
 
 AdcFilter::AdcFilter(uint16_t A, uint16_t N)
 {
-	_a = A;
-	_n = N;
+	a = A;
+	n = N;
 }
 
 AdcFilter::AdcFilter()
 {
-	_a = 30;
-	_n = 8;
+	a = 30;
+	n = 8;
 }
 
-uint16_t AdcFilter::GetValue(uint8_t pin, uint16_t oldValue) const
+int AdcFilter::readMiliVolts(uint8_t pin, int oldValue)
 {
-	k = 0;
-	for (int i = 0; i < _n; i++)
+	adc_k = 0;
+	for (int i = 0; i < n; i++)
 	{
-		k += analogRead(pin);
+		adc_k += analogReadMilliVolts(pin);
 	}
 
-	k0 = k / _n;
+	adc_k0 = adc_k / n;
 
-	if (abs(k0 - oldValue) > _a)
+	if (abs(adc_k0 - oldValue) > a)
 	{
-		return k0;
+		return adc_k0;
 	}
 	return oldValue;
 }

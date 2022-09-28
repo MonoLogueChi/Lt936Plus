@@ -15,13 +15,12 @@
 #define _VSARDUINO_H_
 #define __ESP32_esp32s2__ 1
 #define __ESP32_ESP32S2__ 1
-#define _VMDEBUG 1
 #define HAVE_CONFIG_H 1
 #define MBEDTLS_CONFIG_FILE "mbedtls/esp_config.h"
 #define UNITY_INCLUDE_CONFIG_H 1
 #define WITH_POSIX 1
 #define _GNU_SOURCE 1
-#define IDF_VER "v4.4.1-472-gc9140caf8c"
+#define IDF_VER "v4.4.2"
 #define ESP_PLATFORM 1
 #define _POSIX_READER_WRITER_LOCKS 1
 #define F_CPU 240000000L
@@ -107,6 +106,11 @@ typedef long pthread_cond_t;
 // Ensure ArduinoJSON Lib Intellisense works correctly
 #define ARDUINOJSON_ENABLE_STD_STREAM 0
 
+class VM_DBG {
+public:
+	// Send a Message to the Serial Monitor via WiFi Connection 
+	void sendUserMessage(const char* theMessage) {};
+} MicroDebug;
 #include <arduino.h>
 #include <pins_arduino.h> 
 

@@ -49,7 +49,7 @@ bool canRefreshScreen = true;
 
 // 休眠
 #define XM_PIN 4
-#define SLEEP_TIME 3
+#define SLEEP_TIME 4
 uint8_t toSleep = 0;
 boolean isSleeping = false;
 
@@ -62,7 +62,7 @@ boolean isSleeping = false;
 #define TEMP_TARGET_MAX 450
 #define TEMP_TARGET_MIN 100
 #define TEMP_SAVE_MAX 320
-#define TEMP_TARGET_DEFAULT 180
+#define TEMP_TARGET_DEFAULT 130
 
 #define TEMP_TARGET_KEY "TARGETT"
 
@@ -77,7 +77,7 @@ int CurrentTRaw = 0;
 
 constexpr float k0 = 0.19f;
 constexpr float b0 = 50.0f;
-constexpr float R1 = 1.0 / (1.0 / 1000.0 + 1.0 / 1500.0);
+constexpr uint32_t R1 = 1.0 / (1.0 / 1000.0 + 1.0 / 1500.0);
 
 #if CONFIG_IDF_TARGET_ESP32S2
 constexpr float DMin = 0.0f;
@@ -116,6 +116,50 @@ void PreferencesInit()
 
 # pragma endregion
 
+# pragma region 休眠
+
+void NotSleep()
+{
+	toSleep = 0;
+	isSleeping = false;
+}
+
+
+void TaskSleep(void* p)
+{
+	(void)p;
+
+	for (;;)
+	{
+		if (!isSleeping)
+		{
+			if (toSleep > SLEEP_TIME)
+			{
+				isSleeping = true;
+			}
+			toSleep++;
+		}
+		vTaskDelay(1000 * 10);
+	}
+}
+
+
+void SleepInit()
+{
+	pinMode(XM_PIN, INPUT_PULLUP);
+	attachInterrupt(digitalPinToInterrupt(XM_PIN), NotSleep, FALLING);
+	xTaskCreatePinnedToCore(
+		TaskSleep,
+		"TaskSleep",
+		1024 * 8,
+		nullptr,
+		1,
+		nullptr,
+		ARDUINO_RUNNING_CORE);
+}
+
+# pragma endregion
+
 # pragma region 屏幕
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 // 刷新屏幕
@@ -125,7 +169,7 @@ void RefreshScreen()
 	{
 		canRefreshScreen = false;
 
-		uint8_t y1, y2 = 2;
+		uint8_t y1, y2;
 
 		if (TargetT / 100 > 0)
 		{
@@ -248,7 +292,14 @@ void TaskRotary(void* p)
 	{
 		if (rotaryEncoder.encoderChanged())
 		{
-			TargetT = rotaryEncoder.readEncoder();
+			if (!isSleeping)
+			{
+				TargetT = rotaryEncoder.readEncoder();
+			}
+			else
+			{
+				NotSleep();
+			}
 			RefreshScreen();
 		}
 		if (rotaryEncoder.isEncoderButtonClicked())
@@ -300,105 +351,49 @@ void SerialInit()
 {
 	USBSerial.begin(115200);
 
-	// xTaskCreatePinnedToCore(
-	// 	TaskSerial,
-	// 	"TaskSerial",
-	// 	1024 * 8,
-	// 	nullptr,
-	// 	1,
-	// 	nullptr,
-	// 	ARDUINO_RUNNING_CORE);
-}
-# pragma endregion
-
-# pragma region 休眠
-
-void NotSleep()
-{
-	toSleep = 0;
-	isSleeping = false;
-}
-
-
-void TaskSleep(void* p)
-{
-	(void)p;
-
-	for (;;)
-	{
-		if (!isSleeping)
-		{
-			if (toSleep > SLEEP_TIME)
-			{
-				isSleeping = true;
-			}
-			toSleep++;
-		}
-		vTaskDelay(1000 * 10);
-	}
-}
-
-
-void SleepInit()
-{
-	pinMode(XM_PIN, INPUT_PULLUP);
-	attachInterrupt(digitalPinToInterrupt(XM_PIN), NotSleep, FALLING);
 	xTaskCreatePinnedToCore(
-		TaskSleep,
-		"TaskSleep",
+		TaskSerial,
+		"TaskSerial",
 		1024 * 8,
 		nullptr,
 		1,
 		nullptr,
 		ARDUINO_RUNNING_CORE);
 }
-
 # pragma endregion
+
 
 # pragma region 加热控制
 
-AdcFilter adc = AdcFilter(30, 8);
+AdcFilter adc = AdcFilter(10, 8);
 
-
-int T2C(float t)
+int V2T(int u)
 {
-	const float U = 3.3f* (k0 * t + b0) / (k0 * t + b0 + R1);
-	return U * (4095.0f / DMax);
-}
-
-int C2T(float c)
-{
-	const float U = c * (DMax / 4096.0f);
-	return (U * b0 + U * R1 - 3.3f * b0) / ((3.3f - 1.0f) * k0);
+	return static_cast<int>((static_cast<float>(u) / 1000 * (b0 + R1) - 3.3f * b0) / ((3.3f - 1.0f) * k0));
 }
 
 void JRAdc()
 {
-	CurrentTRaw = adc.GetValue(TEMP_ADC_PIN, CurrentTRaw);
-	CurrentT = C2T(static_cast<float>(CurrentTRaw));
+	CurrentTRaw = adc.readMiliVolts(TEMP_ADC_PIN, CurrentTRaw);
+	CurrentT = V2T(CurrentTRaw);
+	// USBSerial.print(CurrentTRaw);
+	// USBSerial.print(",");
+	// USBSerial.println(CurrentT);
 }
 
 void JR()
 {
-	const int targetT = isSleeping ? TargetT : TEMP_TARGET_DEFAULT;
-	const int a = T2C(static_cast<float>(targetT)) - CurrentTRaw;
-
-	USBSerial.print(CurrentTRaw);
-	USBSerial.print(",");
-	USBSerial.println(CurrentT);
-
-	if (a > 0)
+	if (!isSleeping && TargetT > CurrentT)
 	{
-		int b = a * 2;
-		if (b > 1024)
-		{
-			b = 1024;
-		}
-		ledcWrite(0, b);
+		digitalWrite(JR_PIN, HIGH);
+	}
+	else if (isSleeping && TEMP_TARGET_DEFAULT > CurrentT)
+	{
+		digitalWrite(JR_PIN, HIGH);
 	}
 	else
 	{
-		ledcWrite(0, 0);
+		digitalWrite(JR_PIN, LOW);
 	}
 }
 
@@ -411,18 +406,16 @@ void TaskJR(void* p)
 	{
 		JRAdc();
 		JR();
-		delay(200);
+		delay(50);
 	}
 }
 
 void JRInit()
 {
-	analogReadResolution(12);
 	analogSetPinAttenuation(TEMP_ADC_PIN, ADC_0db);
 
-	ledcSetup(0, 20 * 1000, 8);
-	ledcAttachPin(JR_PIN, 0);
-	ledcWrite(0, 0);
+	pinMode(JR_PIN, OUTPUT);
+	digitalWrite(JR_PIN, LOW);
 
 	xTaskCreatePinnedToCore(
 		TaskJR,
